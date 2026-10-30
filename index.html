@@ -115,11 +115,11 @@
         <span class="label">Level</span>
         <span id="brival" class="brival">—</span>
       </div>
-      <input type="range" id="bri" min="1" max="127" value="20">
-      <div class="ticks"><span>min 1</span><span>Low 20</span><span>Mid 52</span><span>High 84</span><span>127</span></div>
+      <input type="range" id="bri" min="1" max="255" value="60">
+      <div class="ticks"><span>1</span><span>64</span><span>128</span><span>192</span><span>255</span></div>
       <div class="row" style="margin-top:12px;">
         <button id="briMin">Lowest (1)</button>
-        <button id="briLow">Low (20)</button>
+        <button id="briLow">Bright (200)</button>
       </div>
     </div>
 
@@ -159,15 +159,15 @@ const PRESETS = ["#712d7f","#ff2800","#b4b464","#317f27","#c84c4c","#1e6478"];
 
 function crc16(bytes){let c=0xFFFF;for(const b of bytes){c^=b;for(let i=0;i<8;i++){c=(c&1)?((c>>>1)^0xA001):(c>>>1);}}return [c&0xff,(c>>>8)&0xff];}
 function hexToBytes(h){const a=[];for(let i=0;i<h.length;i+=2)a.push(parseInt(h.substr(i,2),16));return Uint8Array.from(a);}
-function buildFrame({slot=0x04,level=20,on=true,r,g,b,mode=0x10,flag7=0x80,eff=[0,1,4,6],d19=0x04}){
-  const b5=(on?0x80:0x00)|(level&0x7f);
+function buildFrame({slot=0x04,bri=0xff,r,g,b,mode=0x10,flag7=0x80,eff=[0,1,4,6],d19=0x04}){
+  const b5=bri&0xff;   // byte5 = brightness, full 0..255. 0 = off.
   const d=[0x24,0x28,0x00,0x00,slot,b5,mode,flag7,r,g,b,0x23,0xfa,0x00,eff[0],eff[1],eff[2],eff[3],0x00,d19];
   while(d.length<36) d.push(0x00);
   return Uint8Array.from([...d,...crc16(d)]);
 }
 
 // ---- state -------------------------------------------------------------
-const S = {device:null, server:null, write:null, on:true, level:20, mode:"solid",
+const S = {device:null, server:null, write:null, on:true, level:60, mode:"solid",
            r:0x71, g:0x2d, b:0x7f};
 
 // ---- ui refs -----------------------------------------------------------
@@ -187,11 +187,10 @@ async function send(bytes){
     log("TX "+hex(bytes));
   }catch(e){ log("write error: "+e.message); }
 }
-function pushState(){ // brightness + power via RGB scaling; device's own brightness byte is ignored in solid mode
-  const f = S.on ? (S.level/127) : 0;        // 0 = off
-  const r = Math.round(S.r*f), g = Math.round(S.g*f), b = Math.round(S.b*f);
-  const m = S.on ? MODES[S.mode] : MODES.solid;   // stop any effect when off
-  send(buildFrame({r,g,b,level:0x7f,on:true,mode:m.mode,flag7:m.flag7,eff:m.eff,d19:m.d19}));
+function pushState(){ // byte5 = brightness (0..255); 0 = off. RGB stays full colour.
+  const bri = S.on ? (S.level & 0xff) : 0;
+  const m = S.on ? MODES[S.mode] : MODES.solid;
+  send(buildFrame({bri, r:S.r, g:S.g, b:S.b, mode:m.mode, flag7:m.flag7, eff:m.eff, d19:m.d19}));
 }
 
 async function connect(scanAll){
@@ -244,7 +243,7 @@ function syncUI(){
   $("preview").style.background=rgbHex();
   $("picker").value=rgbHex();
   $("bri").value=S.level;
-  $("brival").textContent=`${S.level} / 127  (~${Math.round(S.level/127*100)}%)`;
+  $("brival").textContent=`${S.level} / 255  (~${Math.round(S.level/255*100)}%)`;
   document.querySelectorAll(".sw").forEach(el=>el.classList.toggle("sel",el.dataset.hex.toLowerCase()===rgbHex()));
   document.querySelectorAll(".modebtn").forEach(el=>el.classList.toggle("primary",el.dataset.mode===S.mode));
 }
@@ -261,10 +260,10 @@ $("toggle").onclick=()=>{ S.on=!S.on; syncUI(); pushState(); };
 $("picker").oninput=e=>setColor(e.target.value);
 
 let briTimer=null;
-$("bri").oninput=e=>{ S.level=+e.target.value; $("brival").textContent=`${S.level} / 127  (~${Math.round(S.level/127*100)}%)`;
+$("bri").oninput=e=>{ S.level=+e.target.value; $("brival").textContent=`${S.level} / 255  (~${Math.round(S.level/255*100)}%)`;
   clearTimeout(briTimer); briTimer=setTimeout(pushState,60); };
 $("briMin").onclick=()=>{ S.level=1; syncUI(); pushState(); };
-$("briLow").onclick=()=>{ S.level=20; syncUI(); pushState(); };
+$("briLow").onclick=()=>{ S.level=200; syncUI(); pushState(); };
 document.querySelectorAll(".modebtn").forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; syncUI(); pushState(); });
 
 if(!navigator.bluetooth) $("warn").style.display="block";
