@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BSD Ambient</title>
+<style>
+  :root{
+    --bg:#0a0b0f; --panel:#15171f; --panel2:#1d2029; --line:#2a2e3a;
+    --text:#eef1f7; --dim:#9aa3b2; --accent:#6aa3ff; --ok:#39d98a; --bad:#ff5a6a;
+    --radius:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; background:var(--bg); color:var(--text);
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  body{padding:max(14px,env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));}
+  .wrap{max-width:460px; margin:0 auto; display:flex; flex-direction:column; gap:14px;}
+  header{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  h1{font-size:19px; font-weight:650; margin:0; letter-spacing:.2px;}
+  .dot{width:10px; height:10px; border-radius:50%; background:var(--bad); flex:0 0 auto;
+    box-shadow:0 0 0 3px rgba(255,90,106,.15);}
+  .dot.on{background:var(--ok); box-shadow:0 0 0 3px rgba(57,217,138,.18);}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px;}
+  .card h2{font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim);
+    margin:0 0 12px;}
+  button{font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line);
+    border-radius:12px; padding:13px 14px; cursor:pointer; transition:transform .05s, background .15s;}
+  button:active{transform:scale(.97);}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#06122b; font-weight:650;}
+  button.wide{width:100%;}
+  .row{display:flex; gap:10px;}
+  .row>button{flex:1;}
+  /* power */
+  .power{display:flex; align-items:center; gap:14px;}
+  .toggle{width:76px; height:42px; border-radius:999px; background:#2a2e3a; border:1px solid var(--line);
+    position:relative; flex:0 0 auto; transition:background .2s;}
+  .toggle .knob{position:absolute; top:3px; left:3px; width:34px; height:34px; border-radius:50%;
+    background:#fff; transition:left .2s;}
+  .toggle.on{background:var(--ok);}
+  .toggle.on .knob{left:39px;}
+  .power .label{font-weight:600;}
+  .power .sub{color:var(--dim); font-size:13px;}
+  /* swatches */
+  .swatches{display:grid; grid-template-columns:repeat(6,1fr); gap:10px;}
+  .sw{aspect-ratio:1; border-radius:12px; border:2px solid rgba(255,255,255,.08); cursor:pointer;}
+  .sw.sel{border-color:#fff;}
+  .colorrow{display:flex; align-items:center; gap:12px; margin-top:12px;}
+  .preview{width:48px; height:48px; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;}
+  input[type=color]{width:52px; height:44px; padding:0; border:1px solid var(--line);
+    border-radius:10px; background:var(--panel2);}
+  input[type=color]::-webkit-color-swatch-wrapper{padding:4px;}
+  input[type=color]::-webkit-color-swatch{border:none; border-radius:6px;}
+  /* slider */
+  .brihead{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;}
+  .brival{font-variant-numeric:tabular-nums; color:var(--dim); font-size:14px;}
+  input[type=range]{-webkit-appearance:none; width:100%; height:34px; background:transparent;}
+  input[type=range]::-webkit-slider-runnable-track{height:8px; border-radius:6px;
+    background:linear-gradient(90deg,#3a3f4d,#9aa3b2);}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:28px; height:28px;
+    border-radius:50%; background:#fff; margin-top:-10px; border:none; box-shadow:0 1px 4px rgba(0,0,0,.5);}
+  .ticks{display:flex; justify-content:space-between; color:var(--dim); font-size:11px; margin-top:4px;}
+  .log{font:12px/1.5 ui-monospace,Menlo,monospace; color:var(--dim); background:#0d0f14;
+    border:1px solid var(--line); border-radius:12px; padding:10px; height:90px; overflow:auto;
+    white-space:pre-wrap; word-break:break-all;}
+  .warn{background:#2a1a00; border:1px solid #5a3a00; color:#ffcf8a; padding:12px;
+    border-radius:12px; font-size:14px; display:none;}
+  .muted{color:var(--dim); font-size:12px; margin-top:8px;}
+  .disabled{opacity:.4; pointer-events:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>BSD Ambient</h1>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span id="dot" class="dot"></span>
+      <span id="status" style="font-size:13px; color:var(--dim);">Disconnected</span>
+    </div>
+  </header>
+
+  <div id="warn" class="warn">
+    Web Bluetooth is not available here. Open this page in the <b>Bluefy</b> browser on iPhone,
+    or Chrome/Brave on Android or Mac.
+  </div>
+
+  <button id="connect" class="primary wide">Connect</button>
+
+  <div id="controls" class="disabled">
+
+    <div class="card" style="margin-top:14px;">
+      <h2>Power</h2>
+      <div class="power">
+        <div id="toggle" class="toggle"><div class="knob"></div></div>
+        <div>
+          <div id="powerLabel" class="label">Off</div>
+          <div class="sub">Tap to turn the strip on or off</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <h2>Colour</h2>
+      <div class="swatches" id="swatches"></div>
+      <div class="colorrow">
+        <div id="preview" class="preview"></div>
+        <input type="color" id="picker" value="#712d7f">
+        <div class="muted" style="margin:0;">Pick any colour.<br>Custom slot.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <h2>Brightness</h2>
+      <div class="brihead">
+        <span class="label">Level</span>
+        <span id="brival" class="brival">—</span>
+      </div>
+      <input type="range" id="bri" min="1" max="127" value="20">
+      <div class="ticks"><span>min 1</span><span>Low 20</span><span>Mid 52</span><span>High 84</span><span>127</span></div>
+      <div class="row" style="margin-top:12px;">
+        <button id="briMin">Lowest (1)</button>
+        <button id="briLow">Low (20)</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <h2>Mode</h2>
+      <div class="row">
+        <button data-mode="solid" class="modebtn primary">Solid</button>
+        <button data-mode="fx1" class="modebtn">Effect 1</button>
+        <button data-mode="fx2" class="modebtn">Effect 2</button>
+      </div>
+      <div class="muted">Effects are previews from the capture. We refine them after the next log.</div>
+    </div>
+
+  </div>
+
+  <div class="card">
+    <h2>Log</h2>
+    <div id="log" class="log"></div>
+  </div>
+  <div class="muted" style="text-align:center;">BSD ambient controller · personal tool</div>
+</div>
+
+<script>
+"use strict";
+// ---- protocol ----------------------------------------------------------
+const SVC = 0xFFF0, CH_WRITE = 0xFFF2, CH_NOTIFY = 0xFFF1;
+// startup handshake: exact bytes the stock app sends
+const HANDSHAKE = ["020340d1","021280dd","0a010102030405060708ad73","022740ca"];
+const MODES = {
+  solid:{mode:0x10,flag7:0x80,eff:[0x00,0x01,0x04,0x06],d19:0x04},
+  fx1:  {mode:0x10,flag7:0x80,eff:[0x08,0x09,0x0c,0x0e],d19:0x04},
+  fx2:  {mode:0x11,flag7:0x80,eff:[0x0f,0x0f,0x0e,0x0e],d19:0x04},
+};
+const PRESETS = ["#712d7f","#ff2800","#b4b464","#317f27","#c84c4c","#1e6478"];
+
+function crc16(bytes){let c=0xFFFF;for(const b of bytes){c^=b;for(let i=0;i<8;i++){c=(c&1)?((c>>>1)^0xA001):(c>>>1);}}return [c&0xff,(c>>>8)&0xff];}
+function hexToBytes(h){const a=[];for(let i=0;i<h.length;i+=2)a.push(parseInt(h.substr(i,2),16));return Uint8Array.from(a);}
+function buildFrame({slot=0x04,level=20,on=true,r,g,b,mode=0x10,flag7=0x80,eff=[0,1,4,6],d19=0x04}){
+  const b5=(on?0x80:0x00)|(level&0x7f);
+  const d=[0x24,0x28,0x00,0x00,slot,b5,mode,flag7,r,g,b,0x23,0xfa,0x00,eff[0],eff[1],eff[2],eff[3],0x00,d19];
+  while(d.length<36) d.push(0x00);
+  return Uint8Array.from([...d,...crc16(d)]);
+}
+
+// ---- state -------------------------------------------------------------
+const S = {device:null, server:null, write:null, on:false, level:20, mode:"solid",
+           r:0x71, g:0x2d, b:0x7f};
+
+// ---- ui refs -----------------------------------------------------------
+const $ = id => document.getElementById(id);
+const logEl=$("log");
+function log(m){const t=new Date().toLocaleTimeString();logEl.textContent+=`[${t}] ${m}\n`;logEl.scrollTop=logEl.scrollHeight;}
+function setStatus(txt,ok){$("status").textContent=txt;$("dot").classList.toggle("on",!!ok);}
+function hex(a){return [...a].map(x=>x.toString(16).padStart(2,"0")).join("");}
+
+// ---- bluetooth ---------------------------------------------------------
+async function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+async function send(bytes){
+  if(!S.write){log("not connected");return;}
+  try{
+    if(S.write.writeValueWithoutResponse) await S.write.writeValueWithoutResponse(bytes);
+    else await S.write.writeValue(bytes);
+    log("TX "+hex(bytes));
+  }catch(e){ log("write error: "+e.message); }
+}
+function pushState(){ // send current colour/brightness/mode/power
+  const m=MODES[S.mode];
+  send(buildFrame({r:S.r,g:S.g,b:S.b,level:S.level,on:S.on,mode:m.mode,flag7:m.flag7,eff:m.eff,d19:m.d19}));
+}
+
+async function connect(){
+  if(!navigator.bluetooth){ $("warn").style.display="block"; log("navigator.bluetooth missing"); return; }
+  try{
+    log("requesting device…");
+    S.device = await navigator.bluetooth.requestDevice({
+      filters:[{namePrefix:"BSD"}], optionalServices:[SVC]
+    });
+    S.device.addEventListener("gattserverdisconnected", onDisconnect);
+    setStatus("Connecting…");
+    S.server = await S.device.gatt.connect();
+    const svc = await S.server.getPrimaryService(SVC);
+    S.write = await svc.getCharacteristic(CH_WRITE);
+    const notify = await svc.getCharacteristic(CH_NOTIFY);
+    await notify.startNotifications();
+    notify.addEventListener("characteristicvaluechanged", onNotify);
+    log("connected: "+(S.device.name||"BSD"));
+    // run the startup handshake
+    for(const h of HANDSHAKE){ await send(hexToBytes(h)); await sleep(140); }
+    setStatus(S.device.name||"Connected", true);
+    $("controls").classList.remove("disabled");
+    $("connect").textContent="Disconnect";
+  }catch(e){ log("connect failed: "+e.message); setStatus("Disconnected"); }
+}
+function onDisconnect(){
+  setStatus("Disconnected"); S.write=null; S.server=null;
+  $("controls").classList.add("disabled"); $("connect").textContent="Connect";
+  log("disconnected");
+}
+function onNotify(ev){
+  const v=new Uint8Array(ev.target.value.buffer);
+  log("RX "+hex(v));
+  if(v.length>=11 && v[0]===0x24 && (v[1]===0x27||v[1]===0x28)){
+    const b5=v[5]; S.on=!!(b5&0x80); S.level=b5&0x7f; S.r=v[8]; S.g=v[9]; S.b=v[10];
+    syncUI();
+  }
+}
+
+// ---- ui wiring ---------------------------------------------------------
+function rgbHex(){return "#"+[S.r,S.g,S.b].map(x=>x.toString(16).padStart(2,"0")).join("");}
+function syncUI(){
+  $("toggle").classList.toggle("on",S.on);
+  $("powerLabel").textContent=S.on?"On":"Off";
+  $("preview").style.background=rgbHex();
+  $("picker").value=rgbHex();
+  $("bri").value=S.level;
+  $("brival").textContent=`${S.level} / 127  (~${Math.round(S.level/127*100)}%)`;
+  document.querySelectorAll(".sw").forEach(el=>el.classList.toggle("sel",el.dataset.hex.toLowerCase()===rgbHex()));
+  document.querySelectorAll(".modebtn").forEach(el=>el.classList.toggle("primary",el.dataset.mode===S.mode));
+}
+function setColor(h){ S.r=parseInt(h.substr(1,2),16); S.g=parseInt(h.substr(3,2),16); S.b=parseInt(h.substr(5,2),16); syncUI(); pushState(); }
+
+// swatches
+const sw=$("swatches");
+PRESETS.forEach(h=>{const d=document.createElement("div");d.className="sw";d.dataset.hex=h;d.style.background=h;
+  d.onclick=()=>setColor(h); sw.appendChild(d);});
+
+$("connect").onclick=()=>{ if(S.write) S.device.gatt.disconnect(); else connect(); };
+$("toggle").onclick=()=>{ S.on=!S.on; syncUI(); pushState(); };
+$("picker").oninput=e=>setColor(e.target.value);
+
+let briTimer=null;
+$("bri").oninput=e=>{ S.level=+e.target.value; $("brival").textContent=`${S.level} / 127  (~${Math.round(S.level/127*100)}%)`;
+  clearTimeout(briTimer); briTimer=setTimeout(pushState,60); };
+$("briMin").onclick=()=>{ S.level=1; syncUI(); pushState(); };
+$("briLow").onclick=()=>{ S.level=20; syncUI(); pushState(); };
+document.querySelectorAll(".modebtn").forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; syncUI(); pushState(); });
+
+if(!navigator.bluetooth) $("warn").style.display="block";
+syncUI();
+log("ready — tap Connect");
+</script>
+</body>
+</html>
