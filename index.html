@@ -84,6 +84,7 @@
   </div>
 
   <button id="connect" class="primary wide">Connect</button>
+  <button id="connectAny" class="wide" style="margin-top:8px;">Can't find it? Show all devices</button>
 
   <div id="controls" class="disabled">
 
@@ -189,28 +190,36 @@ function pushState(){ // send current colour/brightness/mode/power
   send(buildFrame({r:S.r,g:S.g,b:S.b,level:S.level,on:S.on,mode:m.mode,flag7:m.flag7,eff:m.eff,d19:m.d19}));
 }
 
-async function connect(){
-  if(!navigator.bluetooth){ $("warn").style.display="block"; log("navigator.bluetooth missing"); return; }
+async function connect(scanAll){
+  if(!navigator.bluetooth){ $("warn").style.display="block"; log("navigator.bluetooth missing — open in Bluefy"); return; }
   try{
-    log("requesting device…");
-    S.device = await navigator.bluetooth.requestDevice({
-      filters:[{namePrefix:"BSD"}], optionalServices:[SVC]
-    });
+    log(scanAll ? "scanning ALL devices…" : "requesting BSD device…");
+    const opts = scanAll ? {acceptAllDevices:true, optionalServices:[SVC]}
+                         : {filters:[{namePrefix:"BSD"}], optionalServices:[SVC]};
+    S.device = await navigator.bluetooth.requestDevice(opts);
+    log("picked: "+(S.device.name||"(unnamed)"));
     S.device.addEventListener("gattserverdisconnected", onDisconnect);
     setStatus("Connecting…");
-    S.server = await S.device.gatt.connect();
-    const svc = await S.server.getPrimaryService(SVC);
+    log("gatt connecting…"); S.server = await S.device.gatt.connect(); log("gatt connected");
+    log("finding service FFF0…"); const svc = await S.server.getPrimaryService(SVC);
+    log("finding characteristics…");
     S.write = await svc.getCharacteristic(CH_WRITE);
     const notify = await svc.getCharacteristic(CH_NOTIFY);
     await notify.startNotifications();
     notify.addEventListener("characteristicvaluechanged", onNotify);
-    log("connected: "+(S.device.name||"BSD"));
-    // run the startup handshake
+    log("notifications on");
+    log("handshake…");
     for(const h of HANDSHAKE){ await send(hexToBytes(h)); await sleep(140); }
     setStatus(S.device.name||"Connected", true);
     $("controls").classList.remove("disabled");
     $("connect").textContent="Disconnect";
-  }catch(e){ log("connect failed: "+e.message); setStatus("Disconnected"); }
+    log("ready to control");
+  }catch(e){
+    const msg = (e&&e.message) || (e&&e.name) || String(e) || "unknown";
+    const nm = (e&&e.name && e.name!==e.message) ? " ["+e.name+"]" : "";
+    log("connect failed: "+msg+nm);
+    setStatus("Disconnected"); S.write=null;
+  }
 }
 function onDisconnect(){
   setStatus("Disconnected"); S.write=null; S.server=null;
@@ -245,7 +254,8 @@ const sw=$("swatches");
 PRESETS.forEach(h=>{const d=document.createElement("div");d.className="sw";d.dataset.hex=h;d.style.background=h;
   d.onclick=()=>setColor(h); sw.appendChild(d);});
 
-$("connect").onclick=()=>{ if(S.write) S.device.gatt.disconnect(); else connect(); };
+$("connect").onclick=()=>{ if(S.write) S.device.gatt.disconnect(); else connect(false); };
+$("connectAny").onclick=()=>{ if(!S.write) connect(true); };
 $("toggle").onclick=()=>{ S.on=!S.on; syncUI(); pushState(); };
 $("picker").oninput=e=>setColor(e.target.value);
 
