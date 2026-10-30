@@ -167,7 +167,7 @@ function buildFrame({slot=0x04,level=20,on=true,r,g,b,mode=0x10,flag7=0x80,eff=[
 }
 
 // ---- state -------------------------------------------------------------
-const S = {device:null, server:null, write:null, on:false, level:20, mode:"solid",
+const S = {device:null, server:null, write:null, on:true, level:20, mode:"solid",
            r:0x71, g:0x2d, b:0x7f};
 
 // ---- ui refs -----------------------------------------------------------
@@ -187,9 +187,11 @@ async function send(bytes){
     log("TX "+hex(bytes));
   }catch(e){ log("write error: "+e.message); }
 }
-function pushState(){ // send current colour/brightness/mode/power
-  const m=MODES[S.mode];
-  send(buildFrame({r:S.r,g:S.g,b:S.b,level:S.level,on:S.on,mode:m.mode,flag7:m.flag7,eff:m.eff,d19:m.d19}));
+function pushState(){ // brightness + power via RGB scaling; device's own brightness byte is ignored in solid mode
+  const f = S.on ? (S.level/127) : 0;        // 0 = off
+  const r = Math.round(S.r*f), g = Math.round(S.g*f), b = Math.round(S.b*f);
+  const m = S.on ? MODES[S.mode] : MODES.solid;   // stop any effect when off
+  send(buildFrame({r,g,b,level:0x7f,on:true,mode:m.mode,flag7:m.flag7,eff:m.eff,d19:m.d19}));
 }
 
 async function connect(scanAll){
@@ -229,12 +231,9 @@ function onDisconnect(){
   log("disconnected");
 }
 function onNotify(ev){
-  const v=new Uint8Array(ev.target.value.buffer);
-  log("RX "+hex(v));
-  if(v.length>=11 && v[0]===0x24 && (v[1]===0x27||v[1]===0x28)){
-    const b5=v[5]; S.on=!!(b5&0x80); S.level=b5&0x7f; S.r=v[8]; S.g=v[9]; S.b=v[10];
-    syncUI();
-  }
+  // log only. We do NOT copy state back, because we send SCALED rgb — reading it
+  // back would make the picker decay toward black on every update.
+  log("RX "+hex(new Uint8Array(ev.target.value.buffer)));
 }
 
 // ---- ui wiring ---------------------------------------------------------
